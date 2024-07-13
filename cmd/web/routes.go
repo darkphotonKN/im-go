@@ -3,14 +3,14 @@ package main
 import (
 	"net/http"
 
-	"github.com/bmizerany/pat"
 	"github.com/darkphotonKN/go-im/internal/handlers"
+	"github.com/go-chi/chi/v5"
 )
 
 func routes() http.Handler {
-	mux := pat.New()
+	mux := chi.NewRouter()
 
-	mux.Get("/ws", http.HandlerFunc(handlers.WsEndpoint))
+	mux.Get("/ws", handlers.WsEndpoint)
 
 	return mux
 }
