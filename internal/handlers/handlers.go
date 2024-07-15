@@ -20,9 +20,9 @@ var upgradeConnection = websocket.Upgrader{
 }
 
 // Defines the response sent back from websocket
-type WsJsonResponse struct {
+type WsJsonResponse[T any] struct {
 	Action      string `json:"action"`
-	Message     string `json:"message"`
+	Message     T      `json:"message"`
 	MessageType string `json:"message_type"`
 }
 
@@ -46,7 +46,7 @@ func WsEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Println("Client connected to websocket server.")
-	var response WsJsonResponse
+	var response WsJsonResponse[string]
 
 	response.Message = "Connected!"
 
@@ -66,6 +66,7 @@ func WsEndpoint(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println(err)
 	}
+
 }
 
 // Listen for WebSocket Connections
@@ -88,7 +89,7 @@ func ListenForWS(conn *WebSocketConnection) {
 		if err != nil {
 
 		} else {
-			// add connection pointer to the WebSocket Payload
+			// add connection to the WebSocket Payload
 			payload.Conn = *conn
 
 			// send payload to our websocket channel
@@ -99,26 +100,62 @@ func ListenForWS(conn *WebSocketConnection) {
 
 // Listen to the WebSocket CHANNEL
 func ListenForWSChannel() {
-	var response WsJsonResponse
+	var genericResponse WsJsonResponse[any]
 
 	for {
 		// storing websocket payload coming from wsChan
 		event := <-wsChan
 
+		// based on action we do something different
+
+		if event.Action == "joinchat" {
+			fmt.Printf("Client %s joining chat.", event.Message)
+
+			genericResponse.Action = "joinchat"
+
+			// add user to list of client connections
+			clients[event.Conn] = event.Message // add user to map
+
+			// get list of clients for user
+			genericResponse = getClientListRes()
+			broadcastToAll(genericResponse)
+
+			// stop and skip rest of function
+			continue
+		}
+
 		// responds events sent to the channel to all users
 
-		response.Action = "event"
-		response.Message = fmt.Sprintf("Message received, action was %s. Message was: %s", event.Action, event.Message)
+		// not matching anything, we send back generic response
+		genericResponse.Action = "event"
+		genericResponse.Message = fmt.Sprintf("Message received, action was %s. Message was: %s", event.Action, event.Message)
 
 		// broadcast to all users
-		broadcastToAll(response)
+		broadcastToAll(genericResponse)
 	}
 
 }
 
-// Broadcast to all users
-func broadcastToAll(message WsJsonResponse) {
+// get the clients list and package it to fit action and message
+func getClientListRes() WsJsonResponse[any] {
+	var clientsNameList []string
 
+	// convert clients map into slice of names
+	for _, name := range clients {
+		clientsNameList = append(clientsNameList, name)
+	}
+
+	clientListRes := WsJsonResponse[any]{
+		Action:      "joinchat",
+		Message:     clientsNameList,
+		MessageType: "clients_list",
+	}
+
+	return clientListRes
+}
+
+// Broadcast to all users
+func broadcastToAll(message WsJsonResponse[any]) {
 	// loop through all connected clients and broadcast to them
 	for clientWS := range clients {
 
@@ -135,5 +172,4 @@ func broadcastToAll(message WsJsonResponse) {
 			delete(clients, clientWS)
 		}
 	}
-
 }
